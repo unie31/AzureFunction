@@ -6,14 +6,23 @@ using MillisecondFunctions.Models;
 using Newtonsoft.Json;
 using System.Linq;
 using System.Text;
+using System.Configuration;
+using Microsoft.Extensions.Configuration;
 
 namespace MillisecondFunctions
 {
     public static class Function1
     {
         [FunctionName("Function1")]
-        public static void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log)
+        public static void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log, ExecutionContext context)
         {
+            //config for sendgrid api key
+            var config = new ConfigurationBuilder()
+                 .SetBasePath(context.FunctionAppDirectory)
+                 .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
+                 .AddEnvironmentVariables()
+                 .Build();
+
             log.LogInformation($"Received item from queue: {jsonData}");
 
             MillisecondTestContext db = new MillisecondTestContext();
@@ -57,7 +66,7 @@ namespace MillisecondFunctions
                 log.LogInformation("Record updated successfully for: " + customer.Email);
                 
                 //check if 10 (or more) attributes 
-                Helper.SendEmailIfTenAttributes(existingCustomer, db, log);
+                Helper.SendEmailIfTenAttributes(existingCustomer, db, log, config);
 
             }
 

@@ -6,12 +6,20 @@ using System.Linq;
 using SendGrid;
 using Microsoft.Extensions.Logging;
 using SendGrid.Helpers.Mail;
-
+using System.Configuration;
+using Microsoft.Extensions.Configuration;
 
 namespace MillisecondFunctions
 {
-    public static class Helper
+    public class Helper
     {
+        //dependency injection 
+        private IConfiguration _configuration;
+        public Helper(IConfiguration configuration)
+        {
+            _configuration = configuration;
+        }
+
         public static Customer FromDTOtoCustomer(DTO input)
         {
             StringBuilder sb = new StringBuilder();
@@ -31,7 +39,7 @@ namespace MillisecondFunctions
             return c;
         }
 
-        public static void SendEmailIfTenAttributes(Customer customer, MillisecondTestContext db, ILogger log)
+        public static async void SendEmailIfTenAttributes(Customer customer, MillisecondTestContext db, ILogger log, IConfigurationRoot config)
         {
             var v = (from c in db.Customer
                      where c.Email == customer.Email
@@ -61,11 +69,18 @@ namespace MillisecondFunctions
                 msg.AddContent(MimeType.Text, "your record has 10 attributes:");
                 msg.AddContent(MimeType.Html, sb.ToString());
 
-                var apiKey = Environment.GetEnvironmentVariable("SENDGRID_APIKEY");
-                var client = new SendGridClient(apiKey);
 
-                log.LogInformation("sending email to recipient");
-                var response = client.SendEmailAsync(msg);
+                //var apiKey = System.Environment.GetEnvironmentVariable("sendgrid-apikey");
+                //var apiKey = _configuration["sendgrid-apikey"];
+                //var apiKey = ConfigurationManager.AppSettings["APPSETTING_sendgrid-apikey"];
+                //hardcoded and ugly
+                //var apiKey = "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";
+                var apiKey = config["sendgrid-apikey"];
+                var client = new SendGridClient(apiKey);
+                log.LogInformation("api key: " + apiKey);
+
+                var response = await client.SendEmailAsync(msg);
+                log.LogInformation("email sent to recipient");
 
             }
         }
