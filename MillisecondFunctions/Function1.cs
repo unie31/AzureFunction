@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using MillisecondFunctions.Models;
 using Newtonsoft.Json;
 using System.Linq;
+using System.Text;
 
 namespace MillisecondFunctions
 {
@@ -16,16 +17,16 @@ namespace MillisecondFunctions
             log.LogInformation($"Received item from queue: {jsonData}");
 
             MillisecondTestContext db = new MillisecondTestContext();
-            DTO dto= JsonConvert.DeserializeObject<DTO>(jsonData);
+            DTO dto = JsonConvert.DeserializeObject<DTO>(jsonData);
 
             Customer customer = Helper.FromDTOtoCustomer(dto);
 
-            var duplicateCheck = (from c in db.Customer
+            var existingCustomer = (from c in db.Customer
                                  where c.Email == customer.Email
                                  select c).FirstOrDefault();
 
             //if duplicateCheck null, create new record
-            if (duplicateCheck == null)
+            if (existingCustomer == null)
             {
                 log.LogInformation($"Creating a new record for: {customer.Email}");
 
@@ -42,15 +43,23 @@ namespace MillisecondFunctions
 
             }
 
-
             //if duplicateCheck not null, update current record
+            if(existingCustomer != null)
+            {
+                log.LogInformation($"Updating the record for: {customer.Email}");
+                StringBuilder sb = new StringBuilder(existingCustomer.Attributes);
+                foreach (var item in dto.Attributes)
+                {
+                    sb.Append(item + ";");
+                }
+                existingCustomer.Attributes = sb.ToString();
+                db.SaveChanges();
+                log.LogInformation("Record updated successfully for: " + customer.Email);
+                
+                //check if 10 (or more) attributes 
+                Helper.SendEmailIfTenAttributes(existingCustomer, db, log);
 
-
-            //write to db and check email duplicates
-
-            //check if attributes == 10
-            //congratulate
-
+            }
 
 
         }
