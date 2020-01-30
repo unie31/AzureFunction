@@ -17,8 +17,6 @@ using System.Threading.Tasks;
 
 namespace MillisecondFunctions
 {
-
-    //was static
     public class Function1
     {
         //blob storage client fields
