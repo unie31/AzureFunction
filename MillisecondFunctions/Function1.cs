@@ -8,31 +8,60 @@ using System.Linq;
 using System.Text;
 using System.Configuration;
 using Microsoft.Extensions.Configuration;
+using Microsoft.WindowsAzure.Storage;
+using Microsoft.WindowsAzure.Storage.Blob;
+using Microsoft.WindowsAzure.Storage.Auth;
 
 namespace MillisecondFunctions
 {
-    public static class Function1
+
+    //was static
+    public class Function1
     {
+
+        //blob storage client fields
+        private readonly CloudStorageAccount _storageAccount;
+        private readonly CloudBlobClient _blobClient;
+        private readonly CloudBlobContainer _container;
+        private const string _containerName = "pictures";
+
         [FunctionName("Function1")]
         public static void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log, ExecutionContext context)
         {
             //config for sendgrid api key
             var config = new ConfigurationBuilder()
                  .SetBasePath(context.FunctionAppDirectory)
-                 .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true)
+                 .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true) //if running locally, you need connStrings and appsettings configured in this file
                  .AddEnvironmentVariables()
                  .Build();
 
+            CloudStorageAccount _storageAccount = new CloudStorageAccount(new StorageCredentials) 
+
+        UpdateDatabase(jsonData, log, config);
+            WriteToBlobFile(jsonData, log, config);
+
+        }
+
+        private static void WriteToBlobFile(string jsonData, ILogger log, IConfigurationRoot config)
+        {
+            
+            //hash email
+            //new file for every day: date based filename
+            throw new NotImplementedException();
+        }
+
+        private static void UpdateDatabase(string jsonData, ILogger log, IConfigurationRoot config)
+        {
             log.LogInformation($"Received item from queue: {jsonData}");
 
-            MillisecondTestContext db = new MillisecondTestContext();
+            MillisecondTestContext db = new MillisecondTestContext(config);
             DTO dto = JsonConvert.DeserializeObject<DTO>(jsonData);
 
             Customer customer = Helper.FromDTOtoCustomer(dto);
 
             var existingCustomer = (from c in db.Customer
-                                 where c.Email == customer.Email
-                                 select c).FirstOrDefault();
+                                    where c.Email == customer.Email
+                                    select c).FirstOrDefault();
 
             //if duplicateCheck null, create new record
             if (existingCustomer == null)
@@ -53,7 +82,7 @@ namespace MillisecondFunctions
             }
 
             //if duplicateCheck not null, update current record
-            if(existingCustomer != null)
+            if (existingCustomer != null)
             {
                 log.LogInformation($"Updating the record for: {customer.Email}");
                 StringBuilder sb = new StringBuilder(existingCustomer.Attributes);
@@ -64,13 +93,11 @@ namespace MillisecondFunctions
                 existingCustomer.Attributes = sb.ToString();
                 db.SaveChanges();
                 log.LogInformation("Record updated successfully for: " + customer.Email);
-                
+
                 //check if 10 (or more) attributes 
                 Helper.SendEmailIfTenAttributes(existingCustomer, db, log, config);
 
             }
-
-
         }
     }
 }
