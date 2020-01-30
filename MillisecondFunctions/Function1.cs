@@ -11,6 +11,9 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.WindowsAzure.Storage;
 using Microsoft.WindowsAzure.Storage.Blob;
 using Microsoft.WindowsAzure.Storage.Auth;
+using Microsoft.WindowsAzure.Storage.Table;
+using System.Threading.Tasks;
+
 
 namespace MillisecondFunctions
 {
@@ -29,6 +32,7 @@ namespace MillisecondFunctions
         [FunctionName("Function1")]
         public void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log, ExecutionContext context)
         {
+            //app configuration
             _configuration = new ConfigurationBuilder()
              .SetBasePath(context.FunctionAppDirectory)
              .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true) //if running locally, you need connStrings and appsettings configured in this file
@@ -36,15 +40,64 @@ namespace MillisecondFunctions
              .Build();
 
             //blob storage client config
-            _containerName = Helper.GenerateBlobFileName();
-
+            _containerName = Helper.GenerateDateString();
             _storageAccount = new CloudStorageAccount(new StorageCredentials(_configuration["ConnectionStrings:storageConnection:accountName"], _configuration["ConnectionStrings:storageConnection:accountKey"]), true);
             _blobClient = _storageAccount.CreateCloudBlobClient();
             _container = _blobClient.GetContainerReference(_containerName);
             _container.CreateIfNotExistsAsync().Wait();
 
+
+            //Function logic
             UpdateDatabase(jsonData, log, _configuration);
             WriteToBlobFile(jsonData, log, _configuration, _blobClient, _container);
+            WriteToStorageTable(jsonData, log, _configuration);
+        }
+
+        private async void WriteToStorageTable(string jsonData, ILogger log, IConfigurationRoot configuration)
+        {
+            CloudStorageAccount tableStorageAccount = new CloudStorageAccount(
+                new StorageCredentials(configuration["ConnectionStrings:storageConnection:accountName"], configuration["ConnectionStrings:storageConnection:accountKey"]), true);
+            
+            // Create the table client.
+            CloudTableClient tableClient = tableStorageAccount.CreateCloudTableClient();
+
+            // Get a reference to a table named "storagetable"
+            CloudTable storagetable = tableClient.GetTableReference("storagetable");
+            await storagetable.CreateIfNotExistsAsync();
+
+            //add an entity to the table
+            TableOperation insertOperation = TableOperation.Insert(new TableEntity() { PartitionKey = Helper.GenerateDateString(), RowKey = jsonData });
+
+            // Execute the insert operation.
+            try
+            {
+                await storagetable.ExecuteAsync(insertOperation);
+                log.LogInformation("inserted json to storage table");
+
+            }
+            catch (StorageException)
+            {
+                log.LogInformation("This entry already exists in the table!");
+            }
+
+
+            //////////////
+            ////uncomment below to query the table contents
+            //////////////
+
+            //// Construct the query operation for all customer entities where PartitionKey="3012020".
+            //TableQuery<TableEntity> query = new TableQuery<TableEntity>().Where(TableQuery.GenerateFilterCondition("PartitionKey", QueryComparisons.Equal, "3012020"));
+            //TableContinuationToken token = null;
+            //do
+            //{
+            //    TableQuerySegment<TableEntity> resultSegment = await storagetable.ExecuteQuerySegmentedAsync(query, token);
+            //    token = resultSegment.ContinuationToken;
+
+            //    foreach (TableEntity entity in resultSegment.Results)
+            //    {
+            //        Console.WriteLine("{0}, {1}", entity.PartitionKey, entity.RowKey);
+            //    }
+            //} while (token != null);
         }
 
         private async static void WriteToBlobFile(string jsonData, ILogger log, IConfigurationRoot config, CloudBlobClient blobClient, CloudBlobContainer container)

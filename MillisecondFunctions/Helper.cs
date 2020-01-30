@@ -91,7 +91,7 @@ namespace MillisecondFunctions
             return algorithm.ComputeHash(Encoding.UTF8.GetBytes(input));
         }
 
-        public static string GenerateBlobFileName()
+        public static string GenerateDateString()
         {
             return DateTime.Now.Day.ToString() + DateTime.Now.Month.ToString() + DateTime.Now.Year.ToString();
 
