@@ -18,36 +18,47 @@ namespace MillisecondFunctions
     //was static
     public class Function1
     {
-
         //blob storage client fields
-        private readonly CloudStorageAccount _storageAccount;
-        private readonly CloudBlobClient _blobClient;
-        private readonly CloudBlobContainer _container;
-        private const string _containerName = "pictures";
+        private IConfigurationRoot _configuration;
+        private CloudStorageAccount _storageAccount;
+        private CloudBlobClient _blobClient;
+        private CloudBlobContainer _container;
+        private string _containerName = "containerName"; //gets a date based value in Run
+
 
         [FunctionName("Function1")]
-        public static void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log, ExecutionContext context)
+        public void Run([QueueTrigger("queue", Connection = "")]string jsonData, ILogger log, ExecutionContext context)
         {
-            //config for sendgrid api key
-            var config = new ConfigurationBuilder()
-                 .SetBasePath(context.FunctionAppDirectory)
-                 .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true) //if running locally, you need connStrings and appsettings configured in this file
-                 .AddEnvironmentVariables()
-                 .Build();
+            _configuration = new ConfigurationBuilder()
+             .SetBasePath(context.FunctionAppDirectory)
+             .AddJsonFile("local.settings.json", optional: true, reloadOnChange: true) //if running locally, you need connStrings and appsettings configured in this file
+             .AddEnvironmentVariables()
+             .Build();
 
-            CloudStorageAccount _storageAccount = new CloudStorageAccount(new StorageCredentials) 
+            //blob storage client config
+            _containerName = Helper.GenerateBlobFileName();
 
-        UpdateDatabase(jsonData, log, config);
-            WriteToBlobFile(jsonData, log, config);
+            _storageAccount = new CloudStorageAccount(new StorageCredentials(_configuration["ConnectionStrings:storageConnection:accountName"], _configuration["ConnectionStrings:storageConnection:accountKey"]), true);
+            _blobClient = _storageAccount.CreateCloudBlobClient();
+            _container = _blobClient.GetContainerReference(_containerName);
+            _container.CreateIfNotExistsAsync().Wait();
 
+            UpdateDatabase(jsonData, log, _configuration);
+            WriteToBlobFile(jsonData, log, _configuration, _blobClient, _container);
         }
 
-        private static void WriteToBlobFile(string jsonData, ILogger log, IConfigurationRoot config)
+        private async static void WriteToBlobFile(string jsonData, ILogger log, IConfigurationRoot config, CloudBlobClient blobClient, CloudBlobContainer container)
         {
-            
             //hash email
+            DTO dto = JsonConvert.DeserializeObject<DTO>(jsonData);
+            dto.Email = Helper.HashEmail(dto.Email);
+
+            string hashedJson = JsonConvert.SerializeObject(dto);
+
             //new file for every day: date based filename
-            throw new NotImplementedException();
+            CloudBlockBlob blockBlob = container.GetBlockBlobReference(Guid.NewGuid().ToString() + ".json");
+            await blockBlob.UploadTextAsync(hashedJson);
+            log.LogInformation("created a blob in container: " + container.Name);
         }
 
         private static void UpdateDatabase(string jsonData, ILogger log, IConfigurationRoot config)

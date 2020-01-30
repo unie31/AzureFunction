@@ -8,6 +8,8 @@ using Microsoft.Extensions.Logging;
 using SendGrid.Helpers.Mail;
 using System.Configuration;
 using Microsoft.Extensions.Configuration;
+using System.Security.Cryptography;
+
 
 namespace MillisecondFunctions
 {
@@ -71,6 +73,28 @@ namespace MillisecondFunctions
                 log.LogInformation("email sent to recipient");
 
             }
+        }
+
+        public static string HashEmail(string email)
+        {
+            StringBuilder sb = new StringBuilder();
+            foreach (byte b in GetHash(email))
+            {
+                sb.Append(b.ToString("X2"));
+            }
+            return sb.ToString();
+        }
+
+        private static byte[] GetHash(string input)
+        {
+            HashAlgorithm algorithm = SHA256.Create();
+            return algorithm.ComputeHash(Encoding.UTF8.GetBytes(input));
+        }
+
+        public static string GenerateBlobFileName()
+        {
+            return DateTime.Now.Day.ToString() + DateTime.Now.Month.ToString() + DateTime.Now.Year.ToString();
+
         }
     }
 }
